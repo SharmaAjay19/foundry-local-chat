@@ -1,13 +1,13 @@
 // ─────────────────────────────────────────────────────────────
 // start-foundry.mjs
-// Downloads the qwen2.5-0.5b model and starts the Foundry Local
-// embedded web service on port 5764 (OpenAI-compatible REST API).
+// Downloads models and starts the Foundry Local embedded web
+// service on port 5764 (OpenAI-compatible REST API).
 //
 // Usage: node start-foundry.mjs
 // ─────────────────────────────────────────────────────────────
 import { FoundryLocalManager } from "foundry-local-sdk";
 
-const MODEL_ALIAS = "qwen2.5-0.5b";
+const MODEL_ALIASES = ["qwen2.5-0.5b", "qwen2.5-7b"];
 const SERVICE_URL = "http://127.0.0.1:5764";
 
 console.log("🔧 Initializing Foundry Local SDK...");
@@ -44,25 +44,28 @@ if (eps.length > 0) {
   console.log("ℹ  No additional execution providers to download\n");
 }
 
-// ── Download model ──────────────────────────────────────────
-console.log(`📥 Getting model: ${MODEL_ALIAS}...`);
-const model = await manager.catalog.getModel(MODEL_ALIAS);
+// ── Download and load models ────────────────────────────────
+const models = [];
+for (const alias of MODEL_ALIASES) {
+  console.log(`📥 Getting model: ${alias}...`);
+  const model = await manager.catalog.getModel(alias);
 
-if (!model.isCached) {
-  console.log(`⬇  Downloading ${MODEL_ALIAS} (first run only)...`);
-  await model.download((progress) => {
-    process.stdout.write(`\r   Downloading... ${progress.toFixed(1)}%`);
-  });
-  process.stdout.write("\n");
-  console.log("✓ Model downloaded\n");
-} else {
-  console.log("✓ Model already cached\n");
+  if (!model.isCached) {
+    console.log(`⬇  Downloading ${alias} (first run only)...`);
+    await model.download((progress) => {
+      process.stdout.write(`\r   Downloading... ${progress.toFixed(1)}%`);
+    });
+    process.stdout.write("\n");
+    console.log(`✓ ${alias} downloaded\n`);
+  } else {
+    console.log(`✓ ${alias} already cached\n`);
+  }
+
+  console.log(`🔄 Loading ${alias} into memory...`);
+  await model.load();
+  console.log(`✓ ${alias} loaded\n`);
+  models.push(model);
 }
-
-// ── Load model ──────────────────────────────────────────────
-console.log(`🔄 Loading ${MODEL_ALIAS} into memory...`);
-await model.load();
-console.log("✓ Model loaded\n");
 
 // ── Start embedded web service ──────────────────────────────
 console.log(`🚀 Starting Foundry Local web service on ${SERVICE_URL}...`);
@@ -71,7 +74,7 @@ console.log("✓ Web service running\n");
 
 console.log("═══════════════════════════════════════════════════");
 console.log(`  Foundry Local API:  ${SERVICE_URL}`);
-console.log(`  Model:              ${MODEL_ALIAS}`);
+console.log(`  Models:             ${MODEL_ALIASES.join(", ")}`);
 console.log(`  Endpoints:`);
 console.log(`    GET  ${SERVICE_URL}/v1/models`);
 console.log(`    POST ${SERVICE_URL}/v1/chat/completions`);
@@ -82,7 +85,7 @@ console.log("\nPress Ctrl+C to stop.\n");
 process.on("SIGINT", () => {
   console.log("\n🛑 Shutting down...");
   try {
-    model.unload();
+    for (const m of models) m.unload();
     manager.stopWebService();
   } catch {}
   process.exit(0);
@@ -90,7 +93,7 @@ process.on("SIGINT", () => {
 
 process.on("SIGTERM", () => {
   try {
-    model.unload();
+    for (const m of models) m.unload();
     manager.stopWebService();
   } catch {}
   process.exit(0);

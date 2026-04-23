@@ -2,7 +2,7 @@
 # ─────────────────────────────────────────────────────────────
 # Foundry Chat – Ubuntu VM Setup Script
 # Sets up everything needed to run the local Foundry service
-# with the qwen2.5-0.5b model and the agentic chat interface.
+# with the qwen2.5-0.5b and qwen2.5-7b models and the agentic chat interface.
 #
 # Tested on: Ubuntu 22.04 / 24.04 x64
 # Usage:     chmod +x setup-ubuntu.sh && ./setup-ubuntu.sh [--stack node|python]
@@ -17,7 +17,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 NODE_MAJOR=22
-MODEL_ALIAS="qwen2.5-0.5b"
+MODEL_ALIASES="qwen2.5-0.5b, qwen2.5-7b"
 FOUNDRY_PORT=5764
 CHAT_PORT=3000
 
@@ -134,7 +134,7 @@ if [[ "$STACK" == "python" ]]; then
 echo "  Python:   $("$SCRIPT_DIR/.venv/bin/python3" --version)"
 echo "  Venv:     $SCRIPT_DIR/.venv"
 fi
-echo "  Model:    ${MODEL_ALIAS}"
+echo "  Models:   ${MODEL_ALIASES}"
 echo "  Foundry:  http://127.0.0.1:${FOUNDRY_PORT}"
 echo "  Chat UI:  http://localhost:${CHAT_PORT}"
 echo ""
