@@ -1,0 +1,15 @@
+{
+  "name": "calculator",
+  "description": "Evaluate a mathematical expression and return the numeric result. Supports +, -, *, /, %, ** (power), Math functions like Math.sqrt(), Math.pow(), Math.PI etc.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "expression": {
+        "type": "string",
+        "description": "The mathematical expression to evaluate, e.g. '2 + 2', '15 * 37', 'Math.sqrt(144)'"
+      }
+    },
+    "required": ["expression"]
+  },
+  "code": "// args: { expression: string }\nconst expr = args.expression;\nconst result = Function('\"use strict\"; return (' + expr + ')')();\nreturn { result: Number(result) };"
+}

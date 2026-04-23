@@ -1,0 +1,27 @@
+{
+  "name": "tool_creator",
+  "description": "Create a new tool that the assistant can call in subsequent turns. Use this when the user asks for a capability that no existing tool provides. The new tool is immediately available after creation.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "tool_name": {
+        "type": "string",
+        "description": "A short, lowercase, underscore-separated identifier for the tool (e.g. 'weather_lookup', 'unit_converter')."
+      },
+      "tool_description": {
+        "type": "string",
+        "description": "A clear description of what the tool does. This is shown to the LLM so it knows when to use the tool."
+      },
+      "parameters_schema": {
+        "type": "string",
+        "description": "A JSON string representing the JSON Schema for the tool's parameters. Must be a valid JSON object with \"type\": \"object\", \"properties\": {...}, and \"required\": [...]."
+      },
+      "code": {
+        "type": "string",
+        "description": "The JavaScript function body that implements the tool. Tool arguments are available via the 'args' object. Must return an object with the result. Runs in a sandboxed VM with access to Math, JSON, Date, String, Number, Boolean, Array, Object, parseInt, parseFloat. Example: 'const f = args.fahrenheit; return { celsius: (f - 32) * 5/9 };'"
+      }
+    },
+    "required": ["tool_name", "tool_description", "parameters_schema", "code"]
+  },
+  "code": "\n// Meta-tool: registers a new tool in the tool registry.\n// 'args' contains: tool_name, tool_description, parameters_schema, code\n// '__tools' is injected by the executor for this special tool.\n// '__persistTool' is injected by the executor to save tools to disk.\nconst name = args.tool_name.trim().toLowerCase().replace(/[^a-z0-9_]/g, '_');\nif (!name) return { error: \"tool_name is required\" };\nif (__tools.has(name) && name !== 'tool_creator')\n  return { error: \"Tool '\" + name + \"' already exists. Choose a different name.\" };\n\nlet params;\ntry {\n  params = typeof args.parameters_schema === 'string'\n    ? JSON.parse(args.parameters_schema)\n    : args.parameters_schema;\n} catch (e) {\n  return { error: \"Invalid parameters_schema JSON: \" + e.message };\n}\n\nconst toolDef = {\n  name: name,\n  description: args.tool_description,\n  parameters: params,\n  code: args.code,\n};\n\n__tools.set(name, toolDef);\n__persistTool(toolDef);\n\nreturn {\n  success: true,\n  message: \"Tool '\" + name + \"' created successfully and is now available.\",\n  tool_name: name,\n};\n"
+}

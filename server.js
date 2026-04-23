@@ -1,4 +1,5 @@
 const express = require("express");
+const fs = require("fs");
 const path = require("path");
 const vm = require("vm");
 
@@ -6,105 +7,40 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const FOUNDRY_BASE = "http://127.0.0.1:5764";
 const MAX_TOOL_ROUNDS = 5;
+const TOOLS_DIR = path.join(__dirname, "tools");
 
 app.use(express.json({ limit: "1mb" }));
 app.use(express.static(path.join(__dirname, "public")));
 
-// ── Tool Registry ──────────────────────────────────────────
-const tools = new Map();
-
-// Seed: calculator tool
-tools.set("calculator", {
-  name: "calculator",
-  description:
-    "Evaluate a mathematical expression and return the numeric result. Supports +, -, *, /, %, ** (power), Math functions like Math.sqrt(), Math.pow(), Math.PI etc.",
-  parameters: {
-    type: "object",
-    properties: {
-      expression: {
-        type: "string",
-        description:
-          "The mathematical expression to evaluate, e.g. '2 + 2', '15 * 37', 'Math.sqrt(144)'",
-      },
-    },
-    required: ["expression"],
-  },
-  code: `// args: { expression: string }
-const expr = args.expression;
-const result = Function('"use strict"; return (' + expr + ')')();
-return { result: Number(result) };`,
-});
-
-// Seed: tool_creator — meta-tool that lets the LLM create new tools at runtime
-tools.set("tool_creator", {
-  name: "tool_creator",
-  description:
-    "Create a new tool that the assistant can call in subsequent turns. " +
-    "Use this when the user asks for a capability that no existing tool provides. " +
-    "The new tool is immediately available after creation.",
-  parameters: {
-    type: "object",
-    properties: {
-      tool_name: {
-        type: "string",
-        description:
-          "A short, lowercase, underscore-separated identifier for the tool (e.g. 'weather_lookup', 'unit_converter').",
-      },
-      tool_description: {
-        type: "string",
-        description:
-          "A clear description of what the tool does. This is shown to the LLM so it knows when to use the tool.",
-      },
-      parameters_schema: {
-        type: "string",
-        description:
-          'A JSON string representing the JSON Schema for the tool\'s parameters. ' +
-          'Must be a valid JSON object with "type": "object", "properties": {...}, and "required": [...].',
-      },
-      code: {
-        type: "string",
-        description:
-          "The JavaScript function body that implements the tool. " +
-          "Tool arguments are available via the 'args' object. " +
-          "Must return an object with the result. " +
-          "Runs in a sandboxed VM with access to Math, JSON, Date, String, Number, Boolean, Array, Object, parseInt, parseFloat. " +
-          "Example: 'const f = args.fahrenheit; return { celsius: (f - 32) * 5/9 };'",
-      },
-    },
-    required: ["tool_name", "tool_description", "parameters_schema", "code"],
-  },
-  code: `
-// Meta-tool: registers a new tool in the tool registry.
-// 'args' contains: tool_name, tool_description, parameters_schema, code
-// '__tools' is injected by the executor for this special tool.
-const name = args.tool_name.trim().toLowerCase().replace(/[^a-z0-9_]/g, '_');
-if (!name) return { error: "tool_name is required" };
-if (__tools.has(name) && name !== 'tool_creator')
-  return { error: "Tool '" + name + "' already exists. Choose a different name." };
-
-let params;
-try {
-  params = typeof args.parameters_schema === 'string'
-    ? JSON.parse(args.parameters_schema)
-    : args.parameters_schema;
-} catch (e) {
-  return { error: "Invalid parameters_schema JSON: " + e.message };
+// ── Tool Persistence ───────────────────────────────────────
+function persistTool(toolDef) {
+  fs.mkdirSync(TOOLS_DIR, { recursive: true });
+  const filePath = path.join(TOOLS_DIR, `${toolDef.name}.json`);
+  fs.writeFileSync(filePath, JSON.stringify(toolDef, null, 2) + "\n");
 }
 
-__tools.set(name, {
-  name: name,
-  description: args.tool_description,
-  parameters: params,
-  code: args.code,
-});
+function deleteTool(name) {
+  const filePath = path.join(TOOLS_DIR, `${name}.json`);
+  if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+}
 
-return {
-  success: true,
-  message: "Tool '" + name + "' created successfully and is now available.",
-  tool_name: name,
-};
-`,
-});
+function loadToolsFromDisk() {
+  const loaded = new Map();
+  if (!fs.existsSync(TOOLS_DIR)) return loaded;
+  for (const file of fs.readdirSync(TOOLS_DIR)) {
+    if (!file.endsWith(".json")) continue;
+    try {
+      const toolDef = JSON.parse(fs.readFileSync(path.join(TOOLS_DIR, file), "utf-8"));
+      if (toolDef.name) loaded.set(toolDef.name, toolDef);
+    } catch (err) {
+      console.warn(`  ⚠ Failed to load tool from ${file}: ${err.message}`);
+    }
+  }
+  return loaded;
+}
+
+// ── Tool Registry ──────────────────────────────────────────
+const tools = loadToolsFromDisk();
 
 // ── Tool CRUD API ──────────────────────────────────────────
 app.get("/api/tools", (_req, res) => res.json([...tools.values()]));
@@ -120,14 +56,19 @@ app.put("/api/tools/:name", (req, res) => {
   if (!name || !description || !parameters || !code) {
     return res.status(400).json({ error: "name, description, parameters, and code required" });
   }
-  tools.set(name, { name, description, parameters, code });
+  const toolDef = { name, description, parameters, code };
+  tools.set(name, toolDef);
+  persistTool(toolDef);
   res.json(tools.get(name));
 });
 
 app.delete("/api/tools/:name", (req, res) => {
-  tools.delete(req.params.name)
-    ? res.json({ ok: true })
-    : res.status(404).json({ error: "Tool not found" });
+  if (tools.delete(req.params.name)) {
+    deleteTool(req.params.name);
+    res.json({ ok: true });
+  } else {
+    res.status(404).json({ error: "Tool not found" });
+  }
 });
 
 // ── Tool Executor (sandboxed) ──────────────────────────────
@@ -141,9 +82,10 @@ function executeTool(toolName, argsObj) {
       parseInt, parseFloat, isNaN, isFinite,
       console: { log: () => {} },
     };
-    // Inject the registry for the tool_creator meta-tool
+    // Inject the registry and persistence for the tool_creator meta-tool
     if (toolName === "tool_creator") {
       sandbox.__tools = tools;
+      sandbox.__persistTool = persistTool;
     }
     const result = vm.runInNewContext(
       `(function() {\n${tool.code}\n})()`,
