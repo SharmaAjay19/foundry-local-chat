@@ -9,79 +9,139 @@ The LLM can call **tools** that you author as JavaScript functions directly in t
 ## Features
 
 - **Local AI** — Runs entirely on-device via Foundry Local + ONNX Runtime
+- **Two models** — Ships with `qwen2.5-0.5b` (fast, lightweight) and `qwen2.5-7b` (better reasoning & tool creation)
 - **Agentic tool calling** — OpenAI-style function calling with an automatic loop (up to 5 rounds)
 - **In-browser tool authoring** — Create, edit, and delete tools from the sidebar without restarting
+- **Dynamic tool creation** — The `tool_creator` meta-tool lets the LLM create new tools on the fly (works best with the 7B model)
 - **Sandboxed execution** — Tool code runs in a Node.js `vm` context with a 5-second timeout
 - **Streaming responses** — Server-Sent Events for real-time token streaming
 - **Tool call visualization** — Inline cards showing tool invocations and results in the chat
+- **Two Foundry stacks** — Node.js SDK (`start-foundry.mjs`) or Python SDK (`start-foundry.py`) for starting the Foundry service
 
 ## Prerequisites
 
-- **Node.js 20+**
-- **Foundry Local** running on port `5764` with a model loaded
+- **Node.js 20+** (required for the chat server regardless of stack choice)
+- **Foundry Local** — either via the CLI (Windows/macOS) or the SDK (Linux)
 
-### Windows (quickest)
+## Setup
+
+### Windows
 
 ```bash
+# Install Foundry Local CLI
 winget install Microsoft.FoundryLocal
-foundry model run qwen2.5-0.5b
+
+# Clone and install
+git clone https://github.com/SharmaAjay19/foundry-local-chat.git
+cd foundry-local-chat
+npm install
+
+# Download both models
+foundry model download qwen2.5-0.5b
+foundry model download qwen2.5-7b
 ```
 
 ### macOS
 
 ```bash
+# Install Foundry Local CLI
 brew install microsoft/foundrylocal/foundrylocal
-foundry model run qwen2.5-0.5b
+
+# Clone and install
+git clone https://github.com/SharmaAjay19/foundry-local-chat.git
+cd foundry-local-chat
+npm install
+
+# Download both models
+foundry model download qwen2.5-0.5b
+foundry model download qwen2.5-7b
 ```
 
 ### Linux (Ubuntu)
 
-Run the included setup script which installs Node.js and the `foundry-local-sdk` npm package (no separate CLI needed):
+The included setup script installs Node.js, the Foundry SDK, and all dependencies. Choose your preferred stack for running the Foundry service:
+
+**Python stack (recommended on Linux):**
 
 ```bash
-chmod +x setup-ubuntu.sh run.sh
-./setup-ubuntu.sh
-```
-
-## Quick Start
-
-```bash
-# 1. Clone
 git clone https://github.com/SharmaAjay19/foundry-local-chat.git
 cd foundry-local-chat
+chmod +x setup-ubuntu.sh run.sh
+./setup-ubuntu.sh --stack python
+```
 
-# 2. Install dependencies
-npm install
+This creates a `.venv` virtualenv with the `foundry-local-sdk` Python package.
 
-# 3. Make sure Foundry Local is running with a model loaded
-#    (Windows/macOS: foundry model run qwen2.5-0.5b)
+**Node.js stack:**
 
-# 4. Start the chat server
+```bash
+./setup-ubuntu.sh --stack node
+```
+
+> **Note:** The JS SDK has a [known segfault on Linux](https://github.com/microsoft/Foundry-Local/issues/626). The Python stack is recommended.
+
+## Running
+
+### Option A: All-in-One (Linux / macOS)
+
+```bash
+# Python stack (default on Linux)
+./run.sh
+
+# Node.js stack
+./run.sh --stack node
+```
+
+This starts the Foundry service (downloads models on first run), waits for it to be ready, then starts the chat server. Press `Ctrl+C` to stop both.
+
+### Option B: Run Services Separately
+
+**Terminal 1 — Start Foundry Local service:**
+
+Using the Python SDK:
+```bash
+# Linux (with venv)
+.venv/bin/python3 start-foundry.py
+
+# Windows/macOS (if Python SDK is installed globally)
+python3 start-foundry.py
+```
+
+Using the Node.js SDK:
+```bash
+node start-foundry.mjs
+```
+
+Using the Foundry CLI (Windows/macOS only):
+```bash
+foundry model load qwen2.5-0.5b
+foundry model load qwen2.5-7b
+foundry service start
+```
+
+**Terminal 2 — Start the chat server:**
+
+```bash
+node server.js
+# or
 npm start
 ```
 
-Open **http://localhost:3000** in your browser.
+### Open the Chat UI
 
-### Linux — All-in-One
-
-On Ubuntu, after running `setup-ubuntu.sh`, use the combined launcher:
-
-```bash
-./run.sh
-```
-
-This starts the Foundry Local service (downloads the model on first run) and the chat UI together.
+Navigate to **http://localhost:3000** in your browser. Select a model from the dropdown — use `qwen2.5-7b` for better tool creation and reasoning.
 
 ## Project Structure
 
 ```
 foundry-chat/
 ├── server.js           # Express server: tool registry, agentic loop, SSE streaming
-├── start-foundry.mjs   # Starts Foundry Local via JS SDK (for Linux/cross-platform)
+├── start-foundry.mjs   # Starts Foundry Local via Node.js SDK (downloads & loads both models)
+├── start-foundry.py    # Starts Foundry Local via Python SDK (same, for Linux compatibility)
 ├── public/
 │   └── index.html      # Chat UI with tool sidebar and tool-call visualization
-├── setup-ubuntu.sh     # Ubuntu VM setup (Node.js + npm deps + foundry-local-sdk)
-├── run.sh              # Launches Foundry service + chat server together
+├── setup-ubuntu.sh     # Ubuntu setup (--stack node|python)
+├── run.sh              # Combined launcher (--stack node|python)
 └── package.json
 ```
 
@@ -98,9 +158,20 @@ Express server (server.js)
    │   3. Stream final text response as SSE tokens
    ▼
 Foundry Local (port 5764)
+   Started by start-foundry.mjs (Node) or start-foundry.py (Python)
+   Models: qwen2.5-0.5b, qwen2.5-7b
    OpenAI-compatible /v1/chat/completions
    ONNX Runtime (CPU / GPU / NPU)
 ```
+
+## Models
+
+| Model | Parameters | CPU Size | Best For |
+|-------|-----------|----------|----------|
+| `qwen2.5-0.5b` | 0.5B | 0.80 GB | Fast responses, simple tool calls (calculator, etc.) |
+| `qwen2.5-7b` | 7B | 6.16 GB | Complex reasoning, tool creation, code generation |
+
+Both models are downloaded and loaded by the startup scripts. Select the model from the dropdown in the chat UI.
 
 ## Creating Tools
 
