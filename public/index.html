@@ -546,6 +546,10 @@ async function send() {
             scrollEnd();
             break;
 
+          case "tool_created":
+            loadTools(); // refresh sidebar when agent creates a new tool
+            break;
+
           case "token":
             if (!assistShown) { assistDiv.style.display = "flex"; assistShown = true; }
             typingEl.classList.remove("active");
