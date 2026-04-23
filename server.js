@@ -3,7 +3,7 @@ const path = require("path");
 const vm = require("vm");
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 const FOUNDRY_BASE = "http://127.0.0.1:5764";
 const MAX_TOOL_ROUNDS = 5;
 
