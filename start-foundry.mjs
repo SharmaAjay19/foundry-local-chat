@@ -14,7 +14,7 @@ console.log("🔧 Initializing Foundry Local SDK...");
 const manager = FoundryLocalManager.create({
   appName: "foundry_chat",
   logLevel: "info",
-  webServiceUrls: [SERVICE_URL],
+  webServiceUrls: SERVICE_URL,
 });
 console.log("✓ SDK initialized\n");
 
