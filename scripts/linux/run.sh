@@ -13,7 +13,8 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$SCRIPT_DIR"
+PROJECT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
+cd "$PROJECT_DIR"
 
 # ── Parse arguments ─────────────────────────────────────────
 if [[ "$(uname -s)" == "Linux" ]]; then
@@ -65,14 +66,14 @@ trap cleanup EXIT INT TERM
 # ── Start Foundry Local service ─────────────────────────────
 echo "🔧 Starting Foundry Local service (stack: $STACK)..."
 if [[ "$STACK" == "python" ]]; then
-  VENV_PYTHON="$SCRIPT_DIR/.venv/bin/python3"
+  VENV_PYTHON="$PROJECT_DIR/.venv/bin/python3"
   if [[ -x "$VENV_PYTHON" ]]; then
-    "$VENV_PYTHON" start-foundry.py &
+    "$VENV_PYTHON" scripts/linux/start-foundry.py &
   else
-    python3 start-foundry.py &
+    python3 scripts/linux/start-foundry.py &
   fi
 else
-  node start-foundry.mjs &
+  node scripts/linux/start-foundry.mjs &
 fi
 FOUNDRY_PID=$!
 

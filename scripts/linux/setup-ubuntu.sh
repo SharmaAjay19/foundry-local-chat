@@ -5,7 +5,7 @@
 # with the qwen2.5-0.5b and qwen2.5-7b models and the agentic chat interface.
 #
 # Tested on: Ubuntu 22.04 / 24.04 x64
-# Usage:     chmod +x setup-ubuntu.sh && ./setup-ubuntu.sh [--stack node|python]
+# Usage:     chmod +x scripts/linux/setup-ubuntu.sh && ./scripts/linux/setup-ubuntu.sh [--stack node|python]
 #
 # --stack node    Install JS SDK for Foundry Local service
 # --stack python  Install Python SDK for Foundry Local service (recommended on Linux)
@@ -16,6 +16,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 NODE_MAJOR=22
 MODEL_ALIASES="qwen2.5-0.5b, qwen2.5-7b"
 FOUNDRY_PORT=5764
@@ -101,7 +102,7 @@ fi
 
 # ── 3. npm dependencies ─────────────────────────────────────
 info "Installing npm dependencies..."
-cd "$SCRIPT_DIR"
+cd "$PROJECT_DIR"
 
 # Install the chat app dependencies (always needed for the Chat UI)
 npm install --no-fund --no-audit 2>&1 | tail -1
@@ -116,8 +117,8 @@ ok "npm dependencies installed"
 if [[ "$STACK" == "python" ]]; then
   info "Setting up Python virtual environment..."
   sudo apt-get install -y -qq python3-venv python3-pip > /dev/null 2>&1
-  python3 -m venv "$SCRIPT_DIR/.venv"
-  "$SCRIPT_DIR/.venv/bin/pip" install --quiet foundry-local-sdk
+  python3 -m venv "$PROJECT_DIR/.venv"
+  "$PROJECT_DIR/.venv/bin/pip" install --quiet foundry-local-sdk
   ok "Python SDK installed in .venv"
 fi
 
@@ -131,8 +132,8 @@ echo "  Stack:    ${STACK}"
 echo "  Node.js:  $(node -v)"
 echo "  npm:      $(npm -v)"
 if [[ "$STACK" == "python" ]]; then
-echo "  Python:   $("$SCRIPT_DIR/.venv/bin/python3" --version)"
-echo "  Venv:     $SCRIPT_DIR/.venv"
+echo "  Python:   $("$PROJECT_DIR/.venv/bin/python3" --version)"
+echo "  Venv:     $PROJECT_DIR/.venv"
 fi
 echo "  Models:   ${MODEL_ALIASES}"
 echo "  Foundry:  http://127.0.0.1:${FOUNDRY_PORT}"
@@ -142,17 +143,17 @@ echo -e "${CYAN}To start everything:${NC}"
 echo ""
 if [[ "$STACK" == "python" ]]; then
 echo "  # Option A: Run both together (recommended)"
-echo "  ./run.sh --stack python"
+echo "  ./scripts/linux/run.sh --stack python"
 echo ""
 echo "  # Option B: Run separately"
-echo "  .venv/bin/python3 start-foundry.py   # Terminal 1"
-echo "  node server.js                       # Terminal 2"
+echo "  .venv/bin/python3 scripts/linux/start-foundry.py   # Terminal 1"
+echo "  node server.js                                     # Terminal 2"
 else
 echo "  # Option A: Run both together"
-echo "  ./run.sh --stack node"
+echo "  ./scripts/linux/run.sh --stack node"
 echo ""
 echo "  # Option B: Run separately"
-echo "  node start-foundry.mjs   # Terminal 1"
-echo "  node server.js           # Terminal 2"
+echo "  node scripts/linux/start-foundry.mjs   # Terminal 1"
+echo "  node server.js                         # Terminal 2"
 fi
 echo ""
